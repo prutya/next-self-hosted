@@ -1,0 +1,28 @@
+services:
+  # The main application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    volumes:
+      - "app_build:/app/.next"
+    ports:
+      - "3000:3000"
+    command: ["yarn", "start"]
+    depends_on:
+      app_build:
+        condition: service_completed_successfully
+  # The one-off container that builds the application
+  app_build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    volumes:
+      - "app_build:/app/.next"
+    command: ["yarn", "build"]
+volumes:
+  # The volume that is going to store the .next directory where the built
+  # application is located
+  app_build: {}
