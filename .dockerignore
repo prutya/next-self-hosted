@@ -1,0 +1,48 @@
+# Node modules
+node_modules
+
+# next.js
+/.next/
+/out/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*
+!.env
+
+# Dev tools
+.git
+.github
+.editorconfig
+.gitattributes
+.node-version
+
+# Docker files
+.dockerignore*
+Dockerfile*
+docker-compose*.yml
+
+# Readme
+README.md
+
+# Nginx config
+nginx
+
+# Certificates
+certs
+
+# Scripts
+scripts
+
+# sst
+.sst
+sst.config.ts
+tsconfig.json
+id_ed25519_*

@@ -1,0 +1,25 @@
+# Node modules
+node_modules
+
+# next.js
+/.next/
+/out/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*
+!.env
+
+# Certificates
+certs
+
+# sst
+.sst
+id_ed25519_*
