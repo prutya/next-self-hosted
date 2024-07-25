@@ -11,3 +11,19 @@
 
 #!.yarn/cache
 .pnp.*
+
+# next.js
+/.next/
+/out/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*
+!.env
