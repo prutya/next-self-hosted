@@ -48,3 +48,6 @@ nginx
 
 # Certificates
 certs
+
+# Scripts
+scripts
