@@ -5,10 +5,11 @@ services:
     image: "nginx:1.27.0-bookworm"
     volumes:
       - ./nginx/production.conf:/etc/nginx/nginx.conf
+      - ./certs:/certs
     command: ["nginx", "-g", "daemon off;"]
     restart: always
     ports:
-      - 80:80
+      - 443:443
     networks:
       - public
     depends_on:
