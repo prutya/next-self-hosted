@@ -42,3 +42,6 @@ docker-compose*.yml
 
 # Readme
 README.md
+
+# Nginx config
+nginx

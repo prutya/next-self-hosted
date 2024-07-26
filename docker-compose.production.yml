@@ -1,0 +1,64 @@
+services:
+  # The reverse proxy - the main entrypoint into the application. Holds the TLS
+  # certificates.
+  nginx:
+    image: "nginx:1.27.0-bookworm"
+    volumes:
+      - ./nginx/production.conf:/etc/nginx/nginx.conf
+    command: ["nginx", "-g", "daemon off;"]
+    restart: always
+    ports:
+      - 80:80
+    networks:
+      - public
+    depends_on:
+      app:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "service", "nginx", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+      start_interval: 1s
+  # The main application service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    env_file:
+      - .env.production
+    volumes:
+      - "app_build:/app/.next"
+    command: ["yarn", "start"]
+    restart: always
+    networks:
+      - public
+      - internal
+    depends_on:
+      app_build:
+        condition: service_completed_successfully
+  # The one-off container that builds the application
+  app_build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    env_file:
+      - .env.production
+    volumes:
+      - "app_build:/app/.next"
+    command: ["yarn", "build"]
+volumes:
+  # The volume that is going to store the .next directory where the built
+  # application is located
+  app_build: {}
+networks:
+  # The network for services to which NGINX is connected, meant for services
+  # that have to be exposed to the outside (e.g. the Next.js application or an
+  # API server).
+  public: {}
+  # The network for services that are not meant to be exposed to the outside
+  # e.g. Postgres database, Redis cache.
+  internal: {}
