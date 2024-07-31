@@ -9,7 +9,7 @@ services:
       - "app_build:/app/.next"
     ports:
       - "3000:3000"
-    command: ["yarn", "start"]
+    command: ["pnpm", "start"]
     depends_on:
       app_build:
         condition: service_completed_successfully
@@ -21,7 +21,7 @@ services:
       target: production
     volumes:
       - "app_build:/app/.next"
-    command: ["yarn", "build"]
+    command: ["pnpm", "build"]
 volumes:
   # The volume that is going to store the .next directory where the built
   # application is located

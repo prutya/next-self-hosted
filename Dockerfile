@@ -8,25 +8,25 @@ FROM node:20.16.0-bookworm-slim AS base
 # the files that make it into production stage
 FROM base AS deps
 
-# Enable Corepack so that Yarn can be installed
-RUN corepack enable
+# Enable Corepack so that pnpm can be installed
+RUN corepack enable pnpm
 
 # The application directory
 WORKDIR /app
 
 # Copy fiels for package management
-COPY package.json yarn.lock .yarnrc.yml ./
+COPY package.json pnpm-lock.yaml ./
 
 # Install packages
-RUN yarn install --immutable --inline-builds
+RUN pnpm install --frozen-lockfile
 
 
 
 # The final image
 FROM base AS production
 
-# Enable Corepack so that Yarn can be installed
-RUN corepack enable
+# Enable Corepack so that pnpm can be installed
+RUN corepack enable pnpm
 
 # Create a group and a non-root user to run the app
 RUN groupadd --gid 1001 "nodejs"
@@ -38,8 +38,8 @@ WORKDIR /app
 # Make sure that the .next directory exists
 RUN mkdir -p /app/.next && chown -R nextjs:nodejs /app
 
-# Copy packages from the dependencies stage
-COPY --from=deps --chown=nextjs:nodejs /app/.yarn /app/.yarn
+# Copy node_modules from the dependencies stage
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
 
 # Copy the rest of the application files
 COPY --chown=nextjs:nodejs . .
@@ -60,4 +60,4 @@ EXPOSE 3000
 USER nextjs:nodejs
 
 # Make sure dependencies are picked up correctly
-RUN yarn install --immutable --inline-builds
+RUN pnpm install --frozen-lockfile
