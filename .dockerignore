@@ -40,3 +40,8 @@ certs
 
 # Scripts
 scripts
+
+# sst
+.sst
+sst.config.ts
+tsconfig.json
