@@ -14,6 +14,7 @@
     "sst": "ion"
   },
   "devDependencies": {
+    "@pulumi/pulumi": "^3.128.0",
     "@types/aws-lambda": "8.10.143"
   }
 }
