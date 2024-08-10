@@ -72,7 +72,7 @@ export default $config({
     // Setup Docker Volumes
     const dockerVolumeAppBuild = new docker.Volume(
       "Docker Volume - App Build",
-      { name: "app_build" },
+      { name: "app_volume_build" },
       { provider: dockerServerHetzner, dependsOn: [server] }
     );
 
@@ -92,7 +92,7 @@ export default $config({
     const dockerAppBuildContainer = new docker.Container(
       "Docker Container - App Build",
       {
-        name: "app_build",
+        name: "app_container_build",
         image: dockerImageHetzner.imageName,
         volumes: [
           {
@@ -215,7 +215,7 @@ export default $config({
     const dockerNginxContainer = new docker.Container(
       "Docker Container - Nginx",
       {
-        name: "nginx",
+        name: "app_container_nginx",
         image: "nginx:1.27.0-bookworm",
         volumes: [
           {
