@@ -18,5 +18,14 @@ export default $config({
     const sshKeyHetzner = new hcloud.SshKey("SSH Key - Hetzner", {
       publicKey: sshKeyLocal.publicKeyOpenssh,
     });
+
+    // Create a Server on Hetzner
+    const server = new hcloud.Server("Server", {
+      image: "docker-ce",
+      serverType: "cx22",
+      location: "nbg1",
+    });
+
+    return { ip: server.ipv4Address };
   },
 });
