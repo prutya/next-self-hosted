@@ -1,4 +1,5 @@
 /// <reference path="./.sst/platform/config.d.ts" />
+
 import { resolve as pathResolve } from "node:path";
 import { writeFileSync as fsWriteFileSync } from "node:fs";
 import { asset as pulumiAsset } from "@pulumi/pulumi";
@@ -14,6 +15,7 @@ export default $config({
         tls: true,
         docker: true,
         "@pulumi/command": true,
+        cloudflare: true,
       },
     };
   },
@@ -28,6 +30,24 @@ export default $config({
       publicKey: sshKeyLocal.publicKeyOpenssh,
     });
 
+    // Create a Firewall on Hetzner
+    const firewall = new hcloud.Firewall("Firewall", {
+      rules: [
+        {
+          port: "22",
+          protocol: "tcp",
+          direction: "in",
+          sourceIps: ["0.0.0.0/0", "::/0"],
+        },
+        {
+          port: "443",
+          protocol: "tcp",
+          direction: "in",
+          sourceIps: ["0.0.0.0/0", "::/0"],
+        },
+      ],
+    });
+
     // Create a Server on Hetzner
     const server = new hcloud.Server("Server", {
       image: "docker-ce",
@@ -35,6 +55,15 @@ export default $config({
       location: "nbg1",
       sshKeys: [sshKeyHetzner.id],
     });
+
+    // Attach Firewall to Server
+    const firewallAttachment = new hcloud.FirewallAttachment(
+      "Firewall Attachment - Server - Firewall",
+      {
+        firewallId: firewall.id.apply((id) => parseInt(id)),
+        serverIds: [server.id.apply((id) => parseInt(id))],
+      }
+    );
 
     // Store the private SSH Key on disk to be able to pass it to the Docker
     // Provider
@@ -245,6 +274,24 @@ export default $config({
         },
       },
       { provider: dockerServerHetzner, dependsOn: [dockerAppContainer] }
+    );
+
+    // Create Cloudflare Provider
+    const cloudflareProvider = new cloudflare.Provider("Cloudflare", {
+      apiToken: process.env.CLOUDFLARE_API_TOKEN,
+    });
+
+    // Make sure Cloudflare DNS it pointing to the correct IP address
+    new cloudflare.Record(
+      "Cloudflare DNS Record - Server",
+      {
+        name: "@",
+        zoneId: "d0d8f8f31e583bfcd9885aa7dfff9b89",
+        type: "A",
+        content: server.ipv4Address,
+        proxied: true,
+      },
+      { provider: cloudflareProvider }
     );
 
     return { ip: server.ipv4Address };
