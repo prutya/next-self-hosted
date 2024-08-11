@@ -2,7 +2,17 @@
 
 import { resolve as pathResolve } from "node:path";
 import { writeFileSync as fsWriteFileSync } from "node:fs";
-import { asset as pulumiAsset } from "@pulumi/pulumi";
+import { asset as pulumiAsset, all as pulumiAll } from "@pulumi/pulumi";
+
+// Specity HCLOUD_TOKEN and CLOUDFLARE_API_TOKEN before running
+// Permissions for CLOUDFLARE_API_TOKEN:
+// - Account Settings:Read
+// - Zone Settings:Edit
+// - SSL and Certificates:Edit
+// - DNS:Edit
+
+const CLOUDFLARE_ZONE_ID = "d0d8f8f31e583bfcd9885aa7dfff9b89";
+const DOMAIN_NAME = "next-self-hosted.click";
 
 export default $config({
   app(input) {
@@ -73,11 +83,35 @@ export default $config({
       return pathResolve(path);
     });
 
+    // Reuse SSH connection settings
+    const serverSSHConnection = pulumiAll([sshKeyLocal, server]).apply(
+      ([key, server]) => {
+        return {
+          host: server.ipv4Address,
+          user: "root",
+          privateKey: key.privateKeyOpenssh,
+        };
+      }
+    );
+
+    // Ensure Docker running
+    const commandEnsureDockerRunning = new command.remote.Command(
+      "Command - Ensure Docker running",
+      {
+        create: "nc -U -z /var/run/docker.sock",
+        connection: serverSSHConnection,
+      }
+    );
+
     // Connect to the Docker Server on the Hetzner Server
-    const dockerServerHetzner = new docker.Provider("Docker Server - Hetzner", {
-      host: $interpolate`ssh://root@${server.ipv4Address}`,
-      sshOpts: ["-i", sshKeyLocalPath, "-o", "StrictHostKeyChecking=no"],
-    });
+    const dockerServerHetzner = new docker.Provider(
+      "Docker Server - Hetzner",
+      {
+        host: $interpolate`ssh://root@${server.ipv4Address}`,
+        sshOpts: ["-i", sshKeyLocalPath, "-o", "StrictHostKeyChecking=no"],
+      },
+      { dependsOn: [commandEnsureDockerRunning] }
+    );
 
     // Build the Docker image
     const dockerImageHetzner = new docker.Image(
@@ -94,7 +128,7 @@ export default $config({
       },
       {
         provider: dockerServerHetzner,
-        dependsOn: [server],
+        dependsOn: [commandEnsureDockerRunning],
       }
     );
 
@@ -111,6 +145,7 @@ export default $config({
       { name: "app_network_public" },
       { provider: dockerServerHetzner, dependsOn: [server] }
     );
+
     const dockerNetworkInternal = new docker.Network(
       "Docker Network - Internal",
       { name: "app_network_internal" },
@@ -162,11 +197,7 @@ export default $config({
     // Ensure app directory exists
     new command.remote.Command("Command - Ensure app directory", {
       create: "mkdir -p /root/app",
-      connection: {
-        host: server.ipv4Address,
-        user: "root",
-        privateKey: sshKeyLocal.privateKeyOpenssh,
-      },
+      connection: serverSSHConnection,
     });
 
     // Ensure app/certs directory exists
@@ -187,43 +218,99 @@ export default $config({
           pathResolve("./nginx/production.conf")
         ),
         remotePath: "/root/app/nginx.conf",
-        connection: {
-          host: server.ipv4Address,
-          user: "root",
-          privateKey: sshKeyLocal.privateKeyOpenssh,
-        },
+        connection: serverSSHConnection,
       }
     );
 
-    // Copy Certificates to the VPS
+    // Create Cloudflare Provider
+    const cloudflareProvider = new cloudflare.Provider("Cloudflare", {
+      apiToken: process.env.CLOUDFLARE_API_TOKEN,
+    });
+
+    // Create Private Key for Cloudflare Origin Server certificate
+    const originServerCertKey = new tls.PrivateKey(
+      "TLS Key - Cloudflare Origin Server",
+      {
+        algorithm: "ECDSA",
+        ecdsaCurve: "P256",
+      }
+    );
+
+    // Create Certificate Signing Request for Cloudflare Origin Server certificate
+    const csr = new tls.CertRequest("CSR - Cloudflare Origin Server", {
+      privateKeyPem: originServerCertKey.privateKeyPem,
+      subject: {
+        commonName: "",
+        organization: "Next Self Hosted App",
+      },
+    });
+
+    // Generate Cloudflare certificates
+    const cert = new cloudflare.OriginCaCertificate(
+      "Certificate - Cloudflare Origin Server",
+      {
+        csr: csr.certRequestPem,
+        hostnames: [`*.${DOMAIN_NAME}`, DOMAIN_NAME],
+        requestType: "origin-ecc",
+        requestedValidity: 5475,
+      },
+      { provider: cloudflareProvider }
+    );
+
+    // Copy Cloudflare Origin Server private key to the VPS
     const commandCopyCertificatePrivate = new command.remote.CopyToRemote(
       "Copy - Certificates - Key",
       {
-        source: new pulumiAsset.FileAsset(
-          pathResolve("./certs/cloudflare.key.pem")
-        ),
+        source: originServerCertKey.privateKeyPem.apply((k) => {
+          const path = "./certs/cloudflare.key.pem";
+          fsWriteFileSync(path, k);
+          return new pulumiAsset.FileAsset(pathResolve(path));
+        }),
         remotePath: "/root/app/certs/cloudflare.key.pem",
-        connection: {
-          host: server.ipv4Address,
-          user: "root",
-          privateKey: sshKeyLocal.privateKeyOpenssh,
-        },
+        connection: serverSSHConnection,
+      },
+      {
+        dependsOn: [cert],
       }
     );
-    const commandCopyCertificatePublic = new command.remote.CopyToRemote(
+
+    // Copy Cloudflare Origin Server certificate to the VPS
+    const commandCopyCertificateCert = new command.remote.CopyToRemote(
       "Copy - Certificates - Cert",
       {
-        source: new pulumiAsset.FileAsset(
-          pathResolve("./certs/cloudflare.cert.pem")
-        ),
+        source: cert.certificate.apply((k) => {
+          const path = "./certs/cloudflare.cert.pem";
+          fsWriteFileSync(path, k);
+          return new pulumiAsset.FileAsset(pathResolve(path));
+        }),
         remotePath: "/root/app/certs/cloudflare.cert.pem",
-        connection: {
-          host: server.ipv4Address,
-          user: "root",
-          privateKey: sshKeyLocal.privateKeyOpenssh,
-        },
+        connection: serverSSHConnection,
       }
     );
+
+    // Enable Authenticated Origin Pulls on Cloudflare
+    const cloudflareAuthenticatedOriginPulls =
+      new cloudflare.AuthenticatedOriginPulls(
+        "Cloudflare Authenticated Origin Pulls - Server",
+        {
+          enabled: true,
+          zoneId: CLOUDFLARE_ZONE_ID,
+        },
+        { provider: cloudflareProvider }
+      );
+
+    // Download the Authenticated Origin Pulls certificate from Cloudflare
+    const commandDownloadAopCert = new command.local.Command(
+      "Local Command - Download Cloudflare Authenticated Origin Pulls certificate",
+      {
+        create:
+          "curl --verbose --output " +
+          pathResolve("./certs/authenticated_origin_pull_ca.pem") +
+          " https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem",
+      }
+    );
+
+    // Upload the Authenticated Origin Pulls file from Cloudflare to the Server
     const commandCopyCertificateAuthenticatedOriginPull =
       new command.remote.CopyToRemote(
         "Copy - Certificates - Authenticated Origin Pull",
@@ -232,13 +319,30 @@ export default $config({
             pathResolve("./certs/authenticated_origin_pull_ca.pem")
           ),
           remotePath: "/root/app/certs/authenticated_origin_pull_ca.pem",
-          connection: {
-            host: server.ipv4Address,
-            user: "root",
-            privateKey: sshKeyLocal.privateKeyOpenssh,
-          },
+          connection: serverSSHConnection,
+        },
+        {
+          dependsOn: [commandDownloadAopCert],
         }
       );
+
+    // Set Full(Strict) TLS on Cloudflare
+    // Enable "Always Use HTTPS" on Cloudflare
+    // Enable TLS 1.3 on Cloudflare
+    // Set Minimum TLS version to 1.2 on Cloudflare
+    new cloudflare.ZoneSettingsOverride(
+      "Cloudflare Zone Settings Override",
+      {
+        zoneId: CLOUDFLARE_ZONE_ID,
+        settings: {
+          ssl: "strict",
+          alwaysUseHttps: "on",
+          tls13: "on",
+          minTlsVersion: "1.2",
+        },
+      },
+      { provider: cloudflareProvider }
+    );
 
     // Run the Nginx container
     const dockerNginxContainer = new docker.Container(
@@ -273,27 +377,29 @@ export default $config({
           startPeriod: "10s",
         },
       },
-      { provider: dockerServerHetzner, dependsOn: [dockerAppContainer] }
+      {
+        provider: dockerServerHetzner,
+        dependsOn: [
+          dockerAppContainer,
+          commandCopyCertificateCert,
+          commandCopyCertificatePrivate,
+          commandCopyCertificateAuthenticatedOriginPull,
+        ],
+      }
     );
-
-    // Create Cloudflare Provider
-    const cloudflareProvider = new cloudflare.Provider("Cloudflare", {
-      apiToken: process.env.CLOUDFLARE_API_TOKEN,
-    });
 
     // Make sure Cloudflare DNS it pointing to the correct IP address
     new cloudflare.Record(
       "Cloudflare DNS Record - Server",
       {
         name: "@",
-        zoneId: "d0d8f8f31e583bfcd9885aa7dfff9b89",
+        zoneId: CLOUDFLARE_ZONE_ID,
         type: "A",
         content: server.ipv4Address,
         proxied: true,
       },
       { provider: cloudflareProvider }
     );
-
     return { ip: server.ipv4Address };
   },
 });
