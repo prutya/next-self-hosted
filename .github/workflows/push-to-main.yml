@@ -23,4 +23,4 @@ jobs:
           pnpm install --frozen-lockfile
       - name: Deploy the App
         run: |
-          pnpm sst deploy --production
+          pnpm sst deploy --stage production
