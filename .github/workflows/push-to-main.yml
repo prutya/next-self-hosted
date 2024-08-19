@@ -22,5 +22,8 @@ jobs:
           pnpm --version
           pnpm install --frozen-lockfile
       - name: Deploy the App
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
           pnpm sst deploy --stage production
