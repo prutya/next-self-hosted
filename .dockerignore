@@ -45,4 +45,4 @@ scripts
 .sst
 sst.config.ts
 tsconfig.json
-id_ed25519_hetzner
+id_ed25519_*
