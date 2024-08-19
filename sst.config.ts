@@ -4,6 +4,7 @@ import { writeFileSync as fsWriteFileSync } from "node:fs";
 import { asset as pulumiAsset, all as pulumiAll } from "@pulumi/pulumi";
 // Specity HCLOUD_TOKEN and CLOUDFLARE_API_TOKEN before running
 // Permissions for CLOUDFLARE_API_TOKEN:
+// - Account / Workers R2 Storage : Edit
 // - Account / Cloudflare Tunnel : Edit
 // - Account / Account Settings : Read
 // - Zone / Zone Settings : Edit
@@ -16,7 +17,7 @@ export default $config({
     return {
       name: "next-self-hosted",
       removal: input?.stage === "production" ? "retain" : "remove",
-      home: "local",
+      home: "cloudflare",
       providers: {
         hcloud: true,
         tls: true,
@@ -51,7 +52,7 @@ export default $config({
     const server = new hcloud.Server("Server", {
       image: "docker-ce",
       serverType: "cx22",
-      location: "nbg1",
+      location: "fsn1",
       sshKeys: [sshKeyHetzner.id],
     });
     // Attach Firewall to Server
@@ -62,13 +63,29 @@ export default $config({
         serverIds: [server.id.apply((id) => parseInt(id))],
       }
     );
+    // Make the file name unique
+    const sshKeyPathSuffix = new random.RandomUuid(
+      "Random - SSH Key Path Suffix"
+    );
+    // Prepare SSH Key local path
+    const sshKeyLocalPath = sshKeyPathSuffix.result.apply((suffix) => {
+      return pathResolve(`id_ed25519_${suffix}`);
+    });
     // Store the private SSH Key on disk to be able to pass it to the Docker
     // Provider
-    const sshKeyLocalPath = sshKeyLocal.privateKeyOpenssh.apply((k) => {
-      const path = "id_ed25519_hetzner";
-      fsWriteFileSync(path, k, { mode: 0o600 });
-      return pathResolve(path);
+    command.local.runOutput({
+      command: $interpolate`
+        echo "${sshKeyLocal.privateKeyOpenssh}" > ${sshKeyLocalPath}
+        chmod 600 ${sshKeyLocalPath}
+      `,
     });
+    // Make sure the file is deleted on stack removal
+    const deleteKeyCommand = new command.local.Command(
+      "Command - Write SSH Key to disk",
+      {
+        delete: $interpolate`rm ${sshKeyLocalPath}`,
+      }
+    );
     // Reuse SSH connection settings
     const serverSSHConnection = pulumiAll([sshKeyLocal, server]).apply(
       ([key, server]) => {
@@ -215,35 +232,32 @@ export default $config({
         dependsOn: [dockerAppContainer],
       }
     );
-    // Create Cloudflare Provider
-    const cloudflareProvider = new cloudflare.Provider("Cloudflare", {
-      apiToken: process.env.CLOUDFLARE_API_TOKEN,
-    });
     // Set Full(Strict) TLS on Cloudflare
     // Enable "Always Use HTTPS" on Cloudflare
     // Enable TLS 1.3 on Cloudflare
     // Set Minimum TLS version to 1.2 on Cloudflare
-    new cloudflare.ZoneSettingsOverride(
-      "Cloudflare Zone Settings Override",
-      {
-        zoneId: CLOUDFLARE_ZONE_ID,
-        settings: {
-          alwaysUseHttps: "on",
-          tls13: "on",
-          minTlsVersion: "1.2",
-        },
+    new cloudflare.ZoneSettingsOverride("Cloudflare Zone Settings Override", {
+      zoneId: CLOUDFLARE_ZONE_ID,
+      settings: {
+        ssl: "strict",
+        alwaysUseHttps: "on",
+        tls13: "on",
+        minTlsVersion: "1.2",
       },
-      { provider: cloudflareProvider }
-    );
+    });
     // Create a secret for Cloudflare Tunnel
     const cloudflareTunnelSecret = new random.RandomBytes(
       "Random - Cloudflare Tunnel secret",
       { length: 32 }
     ).base64;
+    // Create a random suffix for Cloudflare Tunnel
+    const cloudflareTunnelSuffix = new random.RandomUuid(
+      "Random - Cloudflare Tunnel Name Suffix"
+    );
     // Create Cloudflare Tunnel
     const cloudflareTunnel = new cloudflare.Tunnel("Cloudflare - Tunnel", {
       accountId: CLOUDFLARE_ACCOUNT_ID,
-      name: DOMAIN_NAME,
+      name: $interpolate`${DOMAIN_NAME}-${cloudflareTunnelSuffix.result}`,
       secret: cloudflareTunnelSecret,
       configSrc: "cloudflare",
     });
@@ -272,19 +286,12 @@ export default $config({
       { provider: dockerServerHetzner }
     );
     // Make sure Cloudflare DNS it pointing to the correct CNAME
-    new cloudflare.Record(
-      "Cloudflare DNS Record - Server",
-      {
-        name: "@",
-        zoneId: CLOUDFLARE_ZONE_ID,
-        type: "CNAME",
-        content: cloudflareTunnel.cname,
-        proxied: true,
-      },
-      { provider: cloudflareProvider }
-    );
-    return {
-      cloudflareTunnelSecret,
-    };
+    new cloudflare.Record("Cloudflare DNS Record - Server", {
+      name: "@",
+      zoneId: CLOUDFLARE_ZONE_ID,
+      type: "CNAME",
+      content: cloudflareTunnel.cname,
+      proxied: true,
+    });
   },
 });

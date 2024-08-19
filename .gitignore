@@ -22,4 +22,4 @@ certs
 
 # sst
 .sst
-id_ed25519_hetzner
+id_ed25519_*

@@ -1,0 +1,24 @@
+name: Push to main
+on:
+  push:
+    branches: [main, sst]
+  workflow_dispatch: {}
+jobs:
+  deploy-sst:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install node modules
+        run: |
+          pnpm --version
+          pnpm install --frozen-lockfile
+      - name: Deploy the App
+        run: |
+          pnpm sst deploy --production
