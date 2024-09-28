@@ -7,6 +7,8 @@ export default function RootLayout({ children }) {
         {children}
         <hr />
         <p>
+          <Link href="https://www.prudkohliad.com">{"Anton's blog"}</Link>
+          {" | "}
           <Link href="https://github.com/prutya/next-self-hosted">
             {"Source code"}
           </Link>
