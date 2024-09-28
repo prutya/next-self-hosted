@@ -1,6 +1,6 @@
 {
   "name": "next-self-hosted",
-  "packageManager": "pnpm@9.6.0+sha512.38dc6fba8dba35b39340b9700112c2fe1e12f10b17134715a4aa98ccf7bb035e76fd981cf0bb384dfa98f8d6af5481c2bef2f4266a24bfa20c34eb7147ce0b5e",
+  "packageManager": "pnpm@9.11.0+sha512.0a203ffaed5a3f63242cd064c8fb5892366c103e328079318f78062f24ea8c9d50bc6a47aa3567cabefd824d170e78fa2745ed1f16b132e16436146b7688f19b",
   "scripts": {
     "build": "next build",
     "dev": "next dev",
@@ -13,10 +13,10 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "sst": "3.1.35",
-    "@pulumi/pulumi": "3.133.0",
+    "@pulumi/pulumi": "3.134.1",
     "@types/aws-lambda": "8.10.145",
-    "@types/react": "18.3.8",
+    "@types/react": "18.3.10",
+    "sst": "3.1.47",
     "typescript": "5.6.2"
   }
 }
