@@ -8,15 +8,15 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "14.2.13",
+    "next": "14.2.14",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@pulumi/pulumi": "3.134.1",
+    "@pulumi/pulumi": "3.135.1",
     "@types/aws-lambda": "8.10.145",
-    "@types/react": "18.3.10",
-    "sst": "3.1.47",
+    "@types/react": "18.3.11",
+    "sst": "3.1.64",
     "typescript": "5.6.2"
   }
 }
